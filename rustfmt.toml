@@ -1,0 +1,11 @@
+# 行の最大幅
+max_width = 100
+
+# importの並び順ルール
+reorder_imports = true
+
+# 1行で記述できるかの判断()
+use_small_heuristics = "Max"
+
+# 改行コード
+newline_style = "Unix"
