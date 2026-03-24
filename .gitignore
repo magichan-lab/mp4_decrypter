@@ -2,4 +2,6 @@
 /target
 /.cargo
 /tmp
+/third_party/ffmpeg/include/*
+/third_party/ffmpeg/lib/*
 

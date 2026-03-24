@@ -2,5 +2,13 @@
 name = "mp4_decrypter"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
+anyhow = "1"
+iced = { version = "0.14", features = ["tokio"] }
+crossbeam-channel = "0.5"
+rfd = "0.17.2"
+
+[build-dependencies]
+cc = "1"
