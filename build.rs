@@ -25,6 +25,23 @@ fn resolve_ffmpeg_layout(root: &PathBuf) -> FfmpegLayout {
 fn main() {
     let root =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is not set"));
+
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        let resource = root.join("assets").join("windows-resource.rc");
+        let icon = root.join("assets").join("app-icon.ico");
+
+        println!("cargo:rerun-if-changed={}", resource.display());
+        println!("cargo:rerun-if-changed={}", icon.display());
+
+        if !resource.exists() {
+            panic!("Windows resource file not found: {}", resource.display());
+        }
+        if !icon.exists() {
+            panic!("Application icon file not found: {}", icon.display());
+        }
+
+        let _ = embed_resource::compile(resource, embed_resource::NONE);
+    }
     let ffmpeg = resolve_ffmpeg_layout(&root);
     let shim = root.join("src").join("ffmpeg_shim.c");
 
