@@ -164,7 +164,7 @@ fn main() -> iced::Result {
         .subscription(subscription)
         .theme(Theme::Dark)
         .title("MP4 Decrypter")
-        .window_size((380.0, 300.0))
+        .window_size((300.0, 280.0))
         .resizable(false)
         .run()
 }

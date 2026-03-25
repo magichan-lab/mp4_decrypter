@@ -1,11 +1,8 @@
 //! iced ベース View 定義
 
-use std::path::Path;
-
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{
-    button, column, container, mouse_area, opaque, progress_bar, row, stack, text, text_input,
-    tooltip,
+    button, column, container, mouse_area, opaque, progress_bar, row, stack, svg, text, text_input,
 };
 use iced::{Border, Color, Element, Fill, Length, Theme};
 
@@ -18,21 +15,18 @@ use crate::presentation::state::{AppModel, AppStatus};
 /// @param model 画面状態 Model
 /// @return メイン画面 Element
 pub fn view(model: &AppModel) -> Element<'_, Message> {
-    let base = container(
-        column![
-            main_filename(model),
-            progress_section(model),
-            text("ファイルをドラッグしてください").width(Fill).align_x(Horizontal::Center),
-            status_bar(model),
-        ]
-        .spacing(16)
-        .padding([24, 24])
-        .max_width(720),
+    let main_content = container(
+        column![main_filename(model), progress_section(model),]
+            .spacing(16)
+            .padding([16, 16])
+            .max_width(720),
     )
     .width(Fill)
     .height(Fill)
     .center_x(Fill)
     .center_y(Fill);
+
+    let base = column![main_content, status_bar(model),].width(Fill).height(Fill).spacing(0);
 
     let interactive_base = if model.ui.status == AppStatus::Wait && model.ui.dialog.is_none() {
         mouse_area(base).on_right_press(Message::ContextMenuRequested).into()
@@ -52,12 +46,27 @@ pub fn view(model: &AppModel) -> Element<'_, Message> {
 /// @param model 画面状態 Model
 /// @return ファイル名表示 Element
 fn main_filename(model: &AppModel) -> Element<'_, Message> {
-    const MAX_VISIBLE_CHARS: usize = 66;
+    const MAX_VISIBLE_CHARS: usize = 100;
     const FILENAME_AREA_HEIGHT: f32 = 72.0;
 
-    let compact = compact_filename(&model.ui.filename, MAX_VISIBLE_CHARS);
+    let content: Element<'_, Message> = if model.ui.status == AppStatus::Wait {
+        text("ファイルをドロップしてください")
+            .size(14)
+            .color(Color::from_rgb8(90, 90, 90))
+            .width(Fill)
+            .align_x(Horizontal::Center)
+            .into()
+    } else {
+        let compact = compact_filename(&model.ui.filename, MAX_VISIBLE_CHARS);
+        text(compact)
+            .size(16)
+            .width(Fill)
+            .wrapping(text::Wrapping::Glyph)
+            .align_x(Horizontal::Left)
+            .into()
+    };
 
-    container(text(compact).width(Fill).wrapping(text::Wrapping::Glyph).align_x(Horizontal::Left))
+    container(content)
         .width(Fill)
         .height(Length::Fixed(FILENAME_AREA_HEIGHT))
         .align_left(Fill)
@@ -123,22 +132,48 @@ fn dialog_overlay(dialog: &DialogState) -> Element<'_, Message> {
 /// @param model 画面状態 Model
 /// @return ステータスバー Element
 fn status_bar(model: &AppModel) -> Element<'_, Message> {
-    container(text(format!("状態: {}", model.ui.status.label())))
+    container(
+        row![
+            text(format!("[{}]", model.ui.status.label()))
+                .size(15)
+                .color(Color::from_rgb8(180, 180, 180)),
+            container(text("")).width(Length::Fill),
+            key_status_icon(model.session.has_key),
+        ]
         .width(Fill)
-        .padding([8, 12])
-        .style(|theme: &Theme| {
-            let palette = theme.extended_palette();
-            container::Style {
-                background: Some(iced::Background::Color(Color::from_rgb8(32, 32, 32))),
-                text_color: Some(palette.background.base.text),
-                border: Border {
-                    width: 1.0,
-                    color: Color::from_rgb8(70, 70, 70),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            }
-        })
+        .align_y(Vertical::Center),
+    )
+    .width(Fill)
+    .padding([8, 12])
+    .style(|theme: &Theme| {
+        let palette = theme.extended_palette();
+        container::Style {
+            background: Some(iced::Background::Color(Color::from_rgb8(32, 32, 32))),
+            text_color: Some(palette.background.base.text),
+            border: Border { width: 1.0, color: Color::from_rgb8(70, 70, 70), ..Border::default() },
+            ..container::Style::default()
+        }
+    })
+    .into()
+}
+
+/// ステータスバー用のキーアイコン描画処理
+///
+/// @param has_key キーの保有の有無
+/// @return キーアイコン Element
+fn key_status_icon(has_key: bool) -> Element<'static, Message> {
+    let handle = if has_key {
+        svg::Handle::from_path("assets/unlock.svg")
+    } else {
+        svg::Handle::from_path("assets/lock.svg")
+    };
+    let color =
+        if has_key { Color::from_rgb8(200, 200, 200) } else { Color::from_rgb8(120, 120, 120) };
+
+    svg(handle)
+        .width(Length::Fixed(18.0))
+        .height(Length::Fixed(18.0))
+        .style(move |_theme: &Theme, _status| svg::Style { color: Some(color) })
         .into()
 }
 
@@ -166,7 +201,6 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
             };
             column![
                 text("キー入力").size(20).align_x(Horizontal::Center),
-                // dialog_filename(path),
                 text("キーを入力してください\n(16進数・32文字）").align_x(Horizontal::Center),
                 text_input("decryption_key", value)
                     .on_input(Message::KeyInputChanged)
@@ -179,9 +213,9 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
             .spacing(12)
             .align_x(Horizontal::Center)
         }
+        #[allow(unused_variables)]
         DialogState::ConfirmSwitch { path } => column![
             text("確認").size(20).align_x(Horizontal::Center),
-            dialog_filename(path),
             text("復号化処理を中止しますか？").align_x(Horizontal::Center),
             row![
                 button("YES").on_press(Message::DialogConfirmed),
@@ -218,56 +252,26 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
         .into()
 }
 
-/// ダイアログ内ファイル名表示構築処理
-///
-/// @param path 対象ファイルパス
-/// @return ファイル名表示 Element
-fn dialog_filename(path: &Path) -> Element<'_, Message> {
-    const MAX_VISIBLE_CHARS: usize = 66;
-    const FILENAME_AREA_HEIGHT: f32 = 72.0;
-
-    let filename = path
-        .file_name()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string());
-    let compact = compact_filename(&filename, MAX_VISIBLE_CHARS);
-
-    let label = container(
-        text(compact).width(Fill).wrapping(text::Wrapping::Glyph).align_x(Horizontal::Left),
-    )
-    .width(Fill)
-    .height(Length::Fixed(FILENAME_AREA_HEIGHT))
-    .align_left(Fill)
-    .center_y(Fill);
-
-    tooltip(
-        label,
-        container(
-            text(filename).width(Fill).wrapping(text::Wrapping::Glyph).align_x(Horizontal::Left),
-        )
-        .padding([8, 12])
-        .max_width(360.0)
-        .style(|theme: &Theme| {
-            let palette = theme.extended_palette();
-            container::Style {
-                background: Some(iced::Background::Color(Color::from_rgb8(38, 38, 38))),
-                text_color: Some(palette.background.base.text),
-                border: Border {
-                    width: 1.0,
-                    color: Color::from_rgb8(90, 90, 90),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            }
-        }),
-        tooltip::Position::Bottom,
-    )
-    .into()
-}
-
 fn compact_filename(filename: &str, max_visible_chars: usize) -> String {
-    if filename.chars().count() > max_visible_chars {
-        filename.chars().take(max_visible_chars - 1).collect::<String>() + "….mp4"
+    let mut parts = filename.rsplitn(2, '.');
+
+    let ext = parts.next().unwrap_or("");
+    let name = parts.next().unwrap_or("");
+
+    // 拡張子が存在しない場合（"."が無い）
+    if name.is_empty() {
+        if filename.chars().count() > max_visible_chars {
+            return filename.chars().take(max_visible_chars).collect::<String>() + "…";
+        } else {
+            return filename.to_string();
+        }
+    }
+
+    let name_chars: Vec<char> = name.chars().collect();
+
+    if name_chars.len() > max_visible_chars {
+        let truncated: String = name_chars.iter().take(max_visible_chars).collect();
+        format!("{}….{}", truncated, ext)
     } else {
         filename.to_string()
     }
