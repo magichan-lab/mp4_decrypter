@@ -1,6 +1,8 @@
 /Cargo.lock
 /target
 /.cargo
+/release
+/logo
 /tmp
 /third_party/ffmpeg/include/*
 /third_party/ffmpeg/lib/*
