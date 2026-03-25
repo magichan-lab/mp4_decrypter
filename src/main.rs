@@ -1,4 +1,5 @@
 //! MP4 復号デスクトップアプリ実行エントリ
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use iced::{application, Subscription, Task, Theme};
 
