@@ -163,9 +163,9 @@ fn status_bar(model: &AppModel) -> Element<'_, Message> {
 /// @return キーアイコン Element
 fn key_status_icon(has_key: bool) -> Element<'static, Message> {
     let handle = if has_key {
-        svg::Handle::from_path("assets/unlock.svg")
+        svg::Handle::from_memory(include_bytes!("../../assets/unlock.svg").as_slice())
     } else {
-        svg::Handle::from_path("assets/lock.svg")
+        svg::Handle::from_memory(include_bytes!("../../assets/lock.svg").as_slice())
     };
     let color =
         if has_key { Color::from_rgb8(200, 200, 200) } else { Color::from_rgb8(120, 120, 120) };
