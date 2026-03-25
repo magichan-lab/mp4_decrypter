@@ -62,7 +62,7 @@ fn main_filename(model: &AppModel) -> Element<'_, Message> {
         .height(Length::Fixed(FILENAME_AREA_HEIGHT))
         .align_left(Fill)
         .center_y(Fill)
-        .style(|theme: &Theme| container::Style {
+        .style(|_theme: &Theme| container::Style {
             border: Border { width: 0.5, color: Color::from_rgb8(70, 70, 70), ..Border::default() },
             ..container::Style::default()
         })
