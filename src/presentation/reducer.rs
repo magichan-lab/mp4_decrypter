@@ -40,6 +40,7 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
                 } else {
                     InspectContext::WithoutKey
                 };
+                model.prepare_inspection(&path);
                 vec![Effect::InspectFile { path, context }]
             }
             AppStatus::Running => {
@@ -48,28 +49,47 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
                 model.ui.dialog = Some(DialogState::ConfirmSwitch { path });
                 vec![Effect::PauseWorker]
             }
-            AppStatus::Finished | AppStatus::Error | AppStatus::Pause => vec![],
+            AppStatus::Finished => {
+                if matches!(model.ui.dialog, Some(DialogState::Info { .. })) {
+                    model.reset_to_wait(model.session.has_key);
+                    let context = if model.session.has_key {
+                        InspectContext::WithKey
+                    } else {
+                        InspectContext::WithoutKey
+                    };
+                    model.prepare_inspection(&path);
+                    vec![Effect::InspectFile { path, context }]
+                } else {
+                    vec![]
+                }
+            }
+            AppStatus::Error | AppStatus::Pause => vec![],
         },
         Intent::FileInspected { path, context, outcome } => match (context, outcome) {
             (_, InspectionOutcome::Failed(error)) => {
+                model.ui.is_inspecting = false;
                 model.show_error("エラー", error.user_message(), model.session.has_key);
                 vec![]
             }
             (InspectContext::WithoutKey, InspectionOutcome::Plain) => {
+                model.ui.is_inspecting = false;
                 model.reset_to_wait(false);
                 model.show_info("確認", "このファイルは暗号化されていません", false);
                 vec![]
             }
             (InspectContext::WithKey, InspectionOutcome::Plain) => {
+                model.ui.is_inspecting = false;
                 model.reset_to_wait(true);
                 model.show_info("確認", "このファイルは暗号化されていません", true);
                 vec![]
             }
             (InspectContext::WithoutKey, InspectionOutcome::Encrypted) => {
+                model.ui.is_inspecting = false;
                 model.show_key_prompt(path);
                 vec![]
             }
             (InspectContext::WithKey, InspectionOutcome::Encrypted) => {
+                model.ui.is_inspecting = false;
                 if let Some(key) = model.session.last_key.clone() {
                     let job_id = model.prepare_decryption(&path, &key);
                     vec![Effect::StartDecryption { job_id, path, key }]
@@ -83,6 +103,7 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             if job_id == model.session.current_job_id {
                 model.ui.filename = filename;
                 model.ui.progress_percent = (ratio * 100.0).clamp(0.0, 100.0);
+                model.ui.is_inspecting = false;
                 if model.ui.status != AppStatus::Pause {
                     model.ui.status = AppStatus::Running;
                 }
@@ -164,6 +185,7 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             model.session.last_key = None;
             model.ui.dialog = None;
             model.ui.status = AppStatus::Wait;
+            model.ui.is_inspecting = false;
             model.normalize_wait_display();
             vec![]
         }
@@ -209,8 +231,9 @@ mod tests {
     use std::path::PathBuf;
 
     use super::reduce;
+    use crate::presentation::dto::DialogState;
     use crate::presentation::intent::{Effect, InspectContext, InspectionOutcome, Intent};
-    use crate::presentation::state::AppModel;
+    use crate::presentation::state::{AppModel, AppStatus};
 
     /// 暗号化ファイル検知時のキー入力ダイアログ遷移確認
     #[test]
@@ -248,5 +271,48 @@ mod tests {
         assert!(
             matches!(effects.as_slice(), [Effect::StartDecryption { key: effect_key, .. }] if effect_key == &key)
         );
+    }
+
+    /// 待機中ドロップ時に検査中表示へ遷移すること
+    #[test]
+    fn move_to_inspecting_on_drop_while_waiting() {
+        let mut model = AppModel::new();
+        let path = PathBuf::from("movie.mp4");
+
+        let effects = reduce(&mut model, Intent::FileDropped(path.clone()));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::InspectFile { path: effect_path, .. }] if effect_path == &path
+        ));
+        assert_eq!(model.ui.status, AppStatus::Running);
+        assert!(model.ui.is_inspecting);
+        assert_eq!(model.ui.filename, "movie.mp4");
+    }
+
+    /// 完了ダイアログ表示中のドロップ時に再検査を開始すること
+    #[test]
+    fn restart_inspection_when_drop_while_finished_dialog() {
+        let mut model = AppModel::new();
+        model.session.has_key = true;
+        model.ui.status = AppStatus::Finished;
+        model.ui.dialog = Some(DialogState::Info {
+            title: "完了".to_string(),
+            message: "終了しました".to_string(),
+            next_has_key: true,
+        });
+        let path = PathBuf::from("next.mp4");
+
+        let effects = reduce(&mut model, Intent::FileDropped(path.clone()));
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::InspectFile { path: effect_path, context: InspectContext::WithKey }]
+            if effect_path == &path
+        ));
+        assert_eq!(model.ui.status, AppStatus::Running);
+        assert!(model.ui.is_inspecting);
+        assert!(model.ui.dialog.is_none());
+        assert_eq!(model.ui.filename, "next.mp4");
     }
 }

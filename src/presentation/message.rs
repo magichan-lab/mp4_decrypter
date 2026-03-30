@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use crate::presentation::intent::{InspectContext, InspectionOutcome};
+
 /// UI メッセージ
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -9,6 +11,8 @@ pub enum Message {
     Tick,
     /// ファイルドロップ
     FileDropped(PathBuf),
+    /// ファイル検査完了
+    FileInspected { path: PathBuf, context: InspectContext, outcome: InspectionOutcome },
     /// 情報／エラー確認ダイアログ OK
     DialogAcknowledged,
     /// 確認ダイアログ YES

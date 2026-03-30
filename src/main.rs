@@ -40,68 +40,99 @@ impl AppRuntime {
     /// @param launch_request 起動要求または起動エラー
     /// @return iced 初期 Task
     fn initialize(&mut self, launch_request: Result<LaunchRequest, AppError>) -> Task<Message> {
-        self.dispatch(Intent::LaunchParsed(launch_request));
-        Task::none()
+        self.dispatch(Intent::LaunchParsed(launch_request))
     }
 
     /// reducer 経由意図反映処理
     ///
     /// @param intent 反映対象意図
-    fn dispatch(&mut self, intent: Intent) {
+    fn dispatch(&mut self, intent: Intent) -> Task<Message> {
         let effects = reduce(&mut self.model, intent);
+        let mut tasks = Vec::new();
         for effect in effects {
-            self.run_effect(effect);
+            tasks.push(self.run_effect(effect));
         }
+        Task::batch(tasks)
     }
 
     /// 副作用実行処理
     ///
     /// @param effect 実行対象副作用命令
-    fn run_effect(&mut self, effect: Effect) {
+    fn run_effect(&mut self, effect: Effect) -> Task<Message> {
         match effect {
-            Effect::InspectFile { path, context } => {
-                let inspect_use_case =
-                    InspectFileUseCase::new(self.decryption_runtime.repository());
-                let outcome = match inspect_use_case.execute(&path) {
-                    Ok(FileEncryptionState::Encrypted) => InspectionOutcome::Encrypted,
-                    Ok(FileEncryptionState::Plain) => InspectionOutcome::Plain,
-                    Err(error) => InspectionOutcome::Failed(error),
-                };
-                self.dispatch(Intent::FileInspected { path, context, outcome });
-            }
+            Effect::InspectFile { path, context } => self.inspect_file_task(path, context),
             Effect::StartDecryption { job_id, path, key } => {
                 let validate_use_case =
                     ValidateOutputPathUseCase::new(self.decryption_runtime.repository());
                 match validate_use_case.execute(&path) {
                     Ok(_) => self.decryption_runtime.start_decryption(job_id, path, key),
-                    Err(error) => self.dispatch(Intent::WorkerFinished {
-                        job_id,
-                        result: DecryptionResult::Failed(error),
-                    }),
+                    Err(error) => {
+                        return self.dispatch(Intent::WorkerFinished {
+                            job_id,
+                            result: DecryptionResult::Failed(error),
+                        });
+                    }
                 }
+                Task::none()
             }
-            Effect::PauseWorker => self.decryption_runtime.pause(),
-            Effect::ResumeWorker => self.decryption_runtime.resume(),
-            Effect::CancelWorker => self.decryption_runtime.cancel(),
+            Effect::PauseWorker => {
+                self.decryption_runtime.pause();
+                Task::none()
+            }
+            Effect::ResumeWorker => {
+                self.decryption_runtime.resume();
+                Task::none()
+            }
+            Effect::CancelWorker => {
+                self.decryption_runtime.cancel();
+                Task::none()
+            }
         }
     }
 
+    /// ファイル検査 Task 生成処理
+    ///
+    /// @param path 対象ファイルパス
+    /// @param context ファイル検査文脈
+    /// @return 検査完了メッセージ返却 Task
+    fn inspect_file_task(
+        &self,
+        path: std::path::PathBuf,
+        context: mp4_decrypter::presentation::intent::InspectContext,
+    ) -> Task<Message> {
+        let repository = self.decryption_runtime.repository();
+        Task::perform(
+            async move {
+                let inspect_use_case = InspectFileUseCase::new(repository);
+                let outcome = match inspect_use_case.execute(&path) {
+                    Ok(FileEncryptionState::Encrypted) => InspectionOutcome::Encrypted,
+                    Ok(FileEncryptionState::Plain) => InspectionOutcome::Plain,
+                    Err(error) => InspectionOutcome::Failed(error),
+                };
+                (path, context, outcome)
+            },
+            |(path, context, outcome)| Message::FileInspected { path, context, outcome },
+        )
+    }
+
     /// ワーカーイベント反映処理
-    fn drain_worker_events(&mut self) {
+    fn drain_worker_events(&mut self) -> Task<Message> {
+        let mut tasks = Vec::new();
         for event in self.decryption_runtime.drain_events() {
             match event {
                 WorkerEvent::Progress { job_id, progress } => {
-                    self.dispatch(Intent::WorkerProgress {
+                    tasks.push(self.dispatch(Intent::WorkerProgress {
                         job_id,
                         filename: progress.filename,
                         ratio: progress.ratio,
-                    });
+                    }));
                 }
                 WorkerEvent::Finished { job_id, result } => {
-                    self.dispatch(Intent::WorkerFinished { job_id, result });
+                    tasks.push(self.dispatch(Intent::WorkerFinished { job_id, result }));
                 }
             }
         }
+        Task::batch(tasks)
     }
 }
 
@@ -122,11 +153,11 @@ fn initialize() -> (AppRuntime, Task<Message>) {
 /// @return 次の iced Task
 fn update(app: &mut AppRuntime, message: Message) -> Task<Message> {
     match message {
-        Message::Tick => {
-            app.drain_worker_events();
-            app.dispatch(Intent::Tick);
-        }
+        Message::Tick => Task::batch(vec![app.drain_worker_events(), app.dispatch(Intent::Tick)]),
         Message::FileDropped(path) => app.dispatch(Intent::FileDropped(path)),
+        Message::FileInspected { path, context, outcome } => {
+            app.dispatch(Intent::FileInspected { path, context, outcome })
+        }
         Message::DialogAcknowledged => app.dispatch(Intent::DialogAcknowledged),
         Message::DialogConfirmed => app.dispatch(Intent::DialogConfirmed),
         Message::DialogDismissed => app.dispatch(Intent::DialogDismissed),
@@ -137,8 +168,6 @@ fn update(app: &mut AppRuntime, message: Message) -> Task<Message> {
         Message::KeyInputSubmitted => app.dispatch(Intent::KeyInputSubmitted),
         Message::KeyInputCancelled => app.dispatch(Intent::KeyInputCancelled),
     }
-
-    Task::none()
 }
 
 /// サブスクリプション生成処理

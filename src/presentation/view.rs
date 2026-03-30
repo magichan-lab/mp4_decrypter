@@ -16,7 +16,7 @@ use crate::presentation::state::{AppModel, AppStatus};
 /// @return メイン画面 Element
 pub fn view(model: &AppModel) -> Element<'_, Message> {
     let main_content = container(
-        column![main_filename(model), progress_section(model),]
+        column![main_filename(model), inspection_indicator(model), progress_section(model),]
             .spacing(16)
             .padding([16, 16])
             .max_width(720),
@@ -39,6 +39,41 @@ pub fn view(model: &AppModel) -> Element<'_, Message> {
     } else {
         interactive_base
     }
+}
+
+/// ファイル解析中インジケータ表示構築処理
+///
+/// @param model 画面状態 Model
+/// @return インジケータ Element
+fn inspection_indicator(model: &AppModel) -> Element<'_, Message> {
+    if model.ui.is_inspecting {
+        container(
+            row![
+                text(inspection_spinner_glyph()).size(18),
+                text("ファイル解析中...").size(14).color(Color::from_rgb8(170, 170, 170))
+            ]
+            .spacing(8)
+            .align_y(Vertical::Center),
+        )
+        .width(Fill)
+        .center_x(Fill)
+        .into()
+    } else {
+        container(text("")).width(Fill).height(Length::Fixed(18.0)).into()
+    }
+}
+
+/// 解析中スピナー文字列取得処理
+///
+/// @return 表示用スピナー文字
+fn inspection_spinner_glyph() -> &'static str {
+    const GLYPHS: [&str; 4] = ["◐", "◓", "◑", "◒"];
+    let frame = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_millis() / 200)
+        .unwrap_or(0)
+        % GLYPHS.len() as u128) as usize;
+    GLYPHS[frame]
 }
 
 /// メインファイル名表示構築処理

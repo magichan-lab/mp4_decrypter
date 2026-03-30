@@ -46,6 +46,7 @@ pub struct UiState {
     pub filename: String,
     pub progress_percent: f32,
     pub status: AppStatus,
+    pub is_inspecting: bool,
     pub dialog: Option<DialogState>,
 }
 
@@ -83,6 +84,7 @@ impl AppModel {
                 filename: String::new(),
                 progress_percent: 0.0,
                 status: AppStatus::Wait,
+                is_inspecting: false,
                 dialog: None,
             },
             session: SessionState {
@@ -101,6 +103,7 @@ impl AppModel {
         if self.ui.status == AppStatus::Wait {
             self.ui.filename.clear();
             self.ui.progress_percent = 0.0;
+            self.ui.is_inspecting = false;
         }
     }
 
@@ -145,6 +148,7 @@ impl AppModel {
         next_has_key: bool,
     ) {
         self.ui.status = AppStatus::Error;
+        self.ui.is_inspecting = false;
         self.ui.dialog =
             Some(DialogState::Error { title: title.into(), message: message.into(), next_has_key });
     }
@@ -154,10 +158,25 @@ impl AppModel {
     /// @param path 対象ファイルパス
     pub fn show_key_prompt(&mut self, path: PathBuf) {
         self.ui.status = AppStatus::Wait;
+        self.ui.is_inspecting = false;
         self.session.has_key = false;
         self.session.last_key = None;
         self.normalize_wait_display();
         self.ui.dialog = Some(DialogState::KeyPrompt { path, value: String::new() });
+    }
+
+    /// ファイル検査開始前状態更新処理
+    ///
+    /// @param path 対象ファイルパス
+    pub fn prepare_inspection(&mut self, path: &PathBuf) {
+        self.ui.filename = path
+            .file_name()
+            .map(|value| value.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        self.ui.progress_percent = 0.0;
+        self.ui.status = AppStatus::Running;
+        self.ui.is_inspecting = true;
+        self.ui.dialog = None;
     }
 
     /// 復号開始前状態更新処理
@@ -173,6 +192,7 @@ impl AppModel {
             .unwrap_or_else(|| path.display().to_string());
         self.ui.progress_percent = 0.0;
         self.ui.status = AppStatus::Running;
+        self.ui.is_inspecting = false;
         self.session.has_key = true;
         self.ui.dialog = None;
         self.session.pending_drop = None;
