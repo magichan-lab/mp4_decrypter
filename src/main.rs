@@ -1,7 +1,7 @@
 //! MP4 復号デスクトップアプリ実行エントリ
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use iced::{application, Subscription, Task, Theme};
+use iced::{application, window, Subscription, Task, Theme};
 
 use mp4_decrypter::application::runtime::DecryptionRuntime;
 use mp4_decrypter::application::use_cases::{InspectFileUseCase, ValidateOutputPathUseCase};
@@ -157,14 +157,24 @@ fn view(app: &AppRuntime) -> iced::Element<'_, Message> {
     mp4_decrypter::presentation::view::view(&app.model)
 }
 
+/// Windows用のアイコンの読み込み処理
+///
+/// @return Windowsアイコン
+fn load_window_icon() -> window::Icon {
+    window::icon::from_file_data(include_bytes!("../assets/app-icon.png"), None)
+        .expect("failed to load window icon")
+}
+
 /// アプリケーション起動処理
 ///
 /// @return iced 実行結果
 fn main() -> iced::Result {
+    let icon = load_window_icon();
     application(initialize, update, view)
         .subscription(subscription)
         .theme(Theme::Dark)
         .title("MP4 Decrypter")
+        .window(window::Settings { icon: Some(icon), ..window::Settings::default() })
         .window_size((300.0, 280.0))
         .resizable(false)
         .run()
