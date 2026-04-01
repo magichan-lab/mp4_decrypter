@@ -174,6 +174,7 @@ fn update(app: &mut AppRuntime, message: Message) -> Task<Message> {
         Message::ClearKeyRequested => app.dispatch(Intent::ClearKeyRequested),
         Message::KeyInputChanged(value) => app.dispatch(Intent::KeyInputChanged(value)),
         Message::KeyInputSubmitted => app.dispatch(Intent::KeyInputSubmitted),
+        Message::KeyInputModeChanged(mode) => app.dispatch(Intent::KeyInputModeChanged(mode)),
         Message::KeyInputCancelled => app.dispatch(Intent::KeyInputCancelled),
     }
 }

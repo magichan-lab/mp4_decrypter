@@ -2,11 +2,12 @@
 
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{
-    button, column, container, mouse_area, opaque, progress_bar, row, stack, svg, text, text_input,
+    button, column, container, mouse_area, opaque, progress_bar, radio, row, stack, svg, text,
+    text_input,
 };
 use iced::{Border, Color, Element, Fill, Length, Theme};
 
-use crate::presentation::dto::DialogState;
+use crate::presentation::dto::{DialogState, KeyInputMode};
 use crate::presentation::message::Message;
 use crate::presentation::state::{AppModel, AppStatus};
 
@@ -228,16 +229,32 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
             .align_x(Horizontal::Center)
         }
         #[allow(unused_variables)]
-        DialogState::KeyPrompt { path, value } => {
+        DialogState::KeyPrompt { path, value, mode } => {
             let ok_button = if value.is_empty() {
                 button("OK")
             } else {
                 button("OK").on_press(Message::KeyInputSubmitted)
             };
+            let placeholder =
+                if *mode == KeyInputMode::Passphrase { "passphrase" } else { "decryption_key" };
             column![
                 text("キー入力").size(20).align_x(Horizontal::Center),
-                text("キーを入力してください\n(16進数・32文字）").align_x(Horizontal::Center),
-                text_input("decryption_key", value)
+                row![
+                    radio(
+                        "暗号化キー",
+                        KeyInputMode::EncryptionKey,
+                        Some(*mode),
+                        Message::KeyInputModeChanged
+                    ),
+                    radio(
+                        "パスフレーズ",
+                        KeyInputMode::Passphrase,
+                        Some(*mode),
+                        Message::KeyInputModeChanged
+                    )
+                ]
+                .spacing(10),
+                text_input(placeholder, value)
                     .on_input(Message::KeyInputChanged)
                     .on_submit_maybe((!value.is_empty()).then_some(Message::KeyInputSubmitted))
                     .width(Length::Fixed(260.0)),

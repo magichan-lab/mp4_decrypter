@@ -2,7 +2,6 @@
 
 use crate::domain::entities::{DecryptionResult, LaunchRequest};
 use crate::domain::errors::AppError;
-use crate::domain::value_objects::DecryptionKey;
 use crate::presentation::dto::DialogState;
 use crate::presentation::intent::{Effect, InspectContext, InspectionOutcome, Intent};
 use crate::presentation::state::{AppModel, AppStatus};
@@ -198,7 +197,13 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
         }
         Intent::KeyInputChanged(value) => {
             if let Some(dialog) = model.ui.dialog.as_mut() {
-                dialog.update_key_input(DecryptionKey::sanitize_input(&value));
+                dialog.update_key_input(value);
+            }
+            vec![]
+        }
+        Intent::KeyInputModeChanged(mode) => {
+            if let Some(dialog) = model.ui.dialog.as_mut() {
+                dialog.update_key_input_mode(mode);
             }
             vec![]
         }

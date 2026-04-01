@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use crate::domain::value_objects::DecryptionKey;
-use crate::presentation::dto::DialogState;
+use crate::presentation::dto::{DialogState, KeyInputMode};
 
 /// アプリ状態表示種別
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,7 +165,11 @@ impl AppModel {
         self.session.has_key = false;
         self.session.last_key = None;
         self.normalize_wait_display();
-        self.ui.dialog = Some(DialogState::KeyPrompt { path, value: String::new() });
+        self.ui.dialog = Some(DialogState::KeyPrompt {
+            path,
+            value: String::new(),
+            mode: KeyInputMode::EncryptionKey,
+        });
     }
 
     /// ファイル検査開始前状態更新処理

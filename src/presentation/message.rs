@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use crate::presentation::dto::KeyInputMode;
 use crate::presentation::intent::{InspectContext, InspectionOutcome};
 
 /// UI メッセージ
@@ -34,6 +35,8 @@ pub enum Message {
     KeyInputChanged(String),
     /// キー入力確定
     KeyInputSubmitted,
+    /// キー入力方式変更
+    KeyInputModeChanged(KeyInputMode),
     /// キー入力キャンセル
     KeyInputCancelled,
 }
