@@ -44,7 +44,12 @@ pub enum Intent {
     /// ファイルドロップ
     FileDropped(PathBuf),
     /// ファイル検査完了
-    FileInspected { path: PathBuf, context: InspectContext, outcome: InspectionOutcome },
+    FileInspected {
+        inspect_id: u64,
+        path: PathBuf,
+        context: InspectContext,
+        outcome: InspectionOutcome,
+    },
     /// 復号進捗更新
     WorkerProgress { job_id: u64, filename: String, ratio: f32 },
     /// 復号完了通知
@@ -78,7 +83,7 @@ pub enum Intent {
 #[derive(Debug, Clone)]
 pub enum Effect {
     /// ファイル暗号化判定要求
-    InspectFile { path: PathBuf, context: InspectContext },
+    InspectFile { inspect_id: u64, path: PathBuf, context: InspectContext },
     /// 復号ジョブ開始要求
     StartDecryption { job_id: u64, path: PathBuf, key: DecryptionKey },
     /// ワーカー一時停止要求

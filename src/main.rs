@@ -60,7 +60,9 @@ impl AppRuntime {
     /// @param effect 実行対象副作用命令
     fn run_effect(&mut self, effect: Effect) -> Task<Message> {
         match effect {
-            Effect::InspectFile { path, context } => self.inspect_file_task(path, context),
+            Effect::InspectFile { inspect_id, path, context } => {
+                self.inspect_file_task(inspect_id, path, context)
+            }
             Effect::StartDecryption { job_id, path, key } => {
                 let validate_use_case =
                     ValidateOutputPathUseCase::new(self.decryption_runtime.repository());
@@ -97,6 +99,7 @@ impl AppRuntime {
     /// @return 検査完了メッセージ返却 Task
     fn inspect_file_task(
         &self,
+        inspect_id: u64,
         path: std::path::PathBuf,
         context: mp4_decrypter::presentation::intent::InspectContext,
     ) -> Task<Message> {
@@ -109,9 +112,14 @@ impl AppRuntime {
                     Ok(FileEncryptionState::Plain) => InspectionOutcome::Plain,
                     Err(error) => InspectionOutcome::Failed(error),
                 };
-                (path, context, outcome)
+                (inspect_id, path, context, outcome)
             },
-            |(path, context, outcome)| Message::FileInspected { path, context, outcome },
+            |(inspect_id, path, context, outcome)| Message::FileInspected {
+                inspect_id,
+                path,
+                context,
+                outcome,
+            },
         )
     }
 
@@ -155,8 +163,8 @@ fn update(app: &mut AppRuntime, message: Message) -> Task<Message> {
     match message {
         Message::Tick => Task::batch(vec![app.drain_worker_events(), app.dispatch(Intent::Tick)]),
         Message::FileDropped(path) => app.dispatch(Intent::FileDropped(path)),
-        Message::FileInspected { path, context, outcome } => {
-            app.dispatch(Intent::FileInspected { path, context, outcome })
+        Message::FileInspected { inspect_id, path, context, outcome } => {
+            app.dispatch(Intent::FileInspected { inspect_id, path, context, outcome })
         }
         Message::DialogAcknowledged => app.dispatch(Intent::DialogAcknowledged),
         Message::DialogConfirmed => app.dispatch(Intent::DialogConfirmed),

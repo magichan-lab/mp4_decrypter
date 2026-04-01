@@ -56,12 +56,14 @@ pub struct UiState {
 /// @property last_key 最後に成功したキー
 /// @property current_job_id 現在ジョブ識別子
 /// @property pending_drop 実行中切り替え待ちファイル
+/// @property current_inspection_id 現在の検査要求識別子
 #[derive(Debug, Clone)]
 pub struct SessionState {
     pub has_key: bool,
     pub last_key: Option<DecryptionKey>,
     pub current_job_id: u64,
     pub pending_drop: Option<PathBuf>,
+    pub current_inspection_id: u64,
 }
 
 /// MVI Model 全体状態
@@ -92,6 +94,7 @@ impl AppModel {
                 last_key: None,
                 current_job_id: 0,
                 pending_drop: None,
+                current_inspection_id: 0,
             },
         };
         model.normalize_wait_display();
@@ -168,7 +171,8 @@ impl AppModel {
     /// ファイル検査開始前状態更新処理
     ///
     /// @param path 対象ファイルパス
-    pub fn prepare_inspection(&mut self, path: &PathBuf) {
+    pub fn prepare_inspection(&mut self, path: &PathBuf) -> u64 {
+        self.session.current_inspection_id += 1;
         self.ui.filename = path
             .file_name()
             .map(|value| value.to_string_lossy().to_string())
@@ -177,6 +181,7 @@ impl AppModel {
         self.ui.status = AppStatus::Running;
         self.ui.is_inspecting = true;
         self.ui.dialog = None;
+        self.session.current_inspection_id
     }
 
     /// 復号開始前状態更新処理

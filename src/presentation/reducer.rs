@@ -21,7 +21,8 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             }
             Ok(LaunchRequest::FileOnly(path)) => {
                 model.reset_to_wait(false);
-                vec![Effect::InspectFile { path, context: InspectContext::WithoutKey }]
+                let inspect_id = model.prepare_inspection(&path);
+                vec![Effect::InspectFile { inspect_id, path, context: InspectContext::WithoutKey }]
             }
             Ok(LaunchRequest::NoFile) => {
                 model.reset_to_wait(false);
@@ -40,8 +41,8 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
                 } else {
                     InspectContext::WithoutKey
                 };
-                model.prepare_inspection(&path);
-                vec![Effect::InspectFile { path, context }]
+                let inspect_id = model.prepare_inspection(&path);
+                vec![Effect::InspectFile { inspect_id, path, context }]
             }
             AppStatus::Running => {
                 model.ui.status = AppStatus::Pause;
@@ -57,48 +58,54 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
                     } else {
                         InspectContext::WithoutKey
                     };
-                    model.prepare_inspection(&path);
-                    vec![Effect::InspectFile { path, context }]
+                    let inspect_id = model.prepare_inspection(&path);
+                    vec![Effect::InspectFile { inspect_id, path, context }]
                 } else {
                     vec![]
                 }
             }
             AppStatus::Error | AppStatus::Pause => vec![],
         },
-        Intent::FileInspected { path, context, outcome } => match (context, outcome) {
-            (_, InspectionOutcome::Failed(error)) => {
-                model.ui.is_inspecting = false;
-                model.show_error("エラー", error.user_message(), model.session.has_key);
-                vec![]
+        Intent::FileInspected { inspect_id, path, context, outcome } => {
+            if inspect_id != model.session.current_inspection_id {
+                return vec![];
             }
-            (InspectContext::WithoutKey, InspectionOutcome::Plain) => {
-                model.ui.is_inspecting = false;
-                model.reset_to_wait(false);
-                model.show_info("確認", "このファイルは暗号化されていません", false);
-                vec![]
-            }
-            (InspectContext::WithKey, InspectionOutcome::Plain) => {
-                model.ui.is_inspecting = false;
-                model.reset_to_wait(true);
-                model.show_info("確認", "このファイルは暗号化されていません", true);
-                vec![]
-            }
-            (InspectContext::WithoutKey, InspectionOutcome::Encrypted) => {
-                model.ui.is_inspecting = false;
-                model.show_key_prompt(path);
-                vec![]
-            }
-            (InspectContext::WithKey, InspectionOutcome::Encrypted) => {
-                model.ui.is_inspecting = false;
-                if let Some(key) = model.session.last_key.clone() {
-                    let job_id = model.prepare_decryption(&path, &key);
-                    vec![Effect::StartDecryption { job_id, path, key }]
-                } else {
-                    model.show_error("エラー", "復号できません", false);
+
+            match (context, outcome) {
+                (_, InspectionOutcome::Failed(error)) => {
+                    model.ui.is_inspecting = false;
+                    model.show_error("エラー", error.user_message(), model.session.has_key);
                     vec![]
                 }
+                (InspectContext::WithoutKey, InspectionOutcome::Plain) => {
+                    model.ui.is_inspecting = false;
+                    model.reset_to_wait(false);
+                    model.show_info("確認", "このファイルは暗号化されていません", false);
+                    vec![]
+                }
+                (InspectContext::WithKey, InspectionOutcome::Plain) => {
+                    model.ui.is_inspecting = false;
+                    model.reset_to_wait(true);
+                    model.show_info("確認", "このファイルは暗号化されていません", true);
+                    vec![]
+                }
+                (InspectContext::WithoutKey, InspectionOutcome::Encrypted) => {
+                    model.ui.is_inspecting = false;
+                    model.show_key_prompt(path);
+                    vec![]
+                }
+                (InspectContext::WithKey, InspectionOutcome::Encrypted) => {
+                    model.ui.is_inspecting = false;
+                    if let Some(key) = model.session.last_key.clone() {
+                        let job_id = model.prepare_decryption(&path, &key);
+                        vec![Effect::StartDecryption { job_id, path, key }]
+                    } else {
+                        model.show_error("エラー", "復号できません", false);
+                        vec![]
+                    }
+                }
             }
-        },
+        }
         Intent::WorkerProgress { job_id, filename, ratio } => {
             if job_id == model.session.current_job_id {
                 model.ui.filename = filename;
@@ -242,6 +249,7 @@ mod tests {
         let effects = reduce(
             &mut model,
             Intent::FileInspected {
+                inspect_id: 0,
                 path: PathBuf::from("movie.mp4"),
                 context: InspectContext::WithoutKey,
                 outcome: InspectionOutcome::Encrypted,
@@ -314,5 +322,45 @@ mod tests {
         assert!(model.ui.is_inspecting);
         assert!(model.ui.dialog.is_none());
         assert_eq!(model.ui.filename, "next.mp4");
+    }
+
+    /// 古い検査結果は反映しないこと
+    #[test]
+    fn ignore_stale_inspection_result() {
+        let mut model = AppModel::new();
+        let path = PathBuf::from("movie.mp4");
+
+        let effects = reduce(&mut model, Intent::FileDropped(path.clone()));
+        let inspect_id = match effects.first() {
+            Some(Effect::InspectFile { inspect_id, .. }) => *inspect_id,
+            _ => panic!("inspect effect is expected"),
+        };
+
+        let stale_effects = reduce(
+            &mut model,
+            Intent::FileInspected {
+                inspect_id: inspect_id.saturating_sub(1),
+                path: path.clone(),
+                context: InspectContext::WithoutKey,
+                outcome: InspectionOutcome::Encrypted,
+            },
+        );
+        assert!(stale_effects.is_empty());
+        assert!(model.ui.is_inspecting);
+
+        let current_effects = reduce(
+            &mut model,
+            Intent::FileInspected {
+                inspect_id,
+                path,
+                context: InspectContext::WithoutKey,
+                outcome: InspectionOutcome::Plain,
+            },
+        );
+        assert!(current_effects.is_empty());
+        assert!(matches!(
+            model.ui.dialog,
+            Some(crate::presentation::dto::DialogState::Info { .. })
+        ));
     }
 }

@@ -12,7 +12,12 @@ pub enum Message {
     /// ファイルドロップ
     FileDropped(PathBuf),
     /// ファイル検査完了
-    FileInspected { path: PathBuf, context: InspectContext, outcome: InspectionOutcome },
+    FileInspected {
+        inspect_id: u64,
+        path: PathBuf,
+        context: InspectContext,
+        outcome: InspectionOutcome,
+    },
     /// 情報／エラー確認ダイアログ OK
     DialogAcknowledged,
     /// 確認ダイアログ YES
