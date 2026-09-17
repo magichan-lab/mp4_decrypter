@@ -72,6 +72,30 @@ impl Drop for Packet {
     }
 }
 
+/// 復号失敗時に一時出力ファイルを削除する RAII ガード
+struct TemporaryOutputGuard {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl TemporaryOutputGuard {
+    fn new(path: PathBuf) -> Self {
+        Self { path, committed: false }
+    }
+
+    fn commit(&mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for TemporaryOutputGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
 impl FfmpegMp4ProcessingRepository {
     /// FFmpeg エラーコード可読メッセージ変換処理
     ///
@@ -183,7 +207,9 @@ impl Mp4ProcessingPort for FfmpegMp4ProcessingRepository {
 
         let input_str = input_path.to_string_lossy().to_string();
         let output = self.output_path(input_path);
-        let output_str = output.to_string_lossy().to_string();
+        let temporary_output = OutputNamingService::build_temporary_output_path(input_path);
+        let output_str = temporary_output.to_string_lossy().to_string();
+        let mut temporary_output_guard = TemporaryOutputGuard::new(temporary_output);
         let filename = input_path
             .file_name()
             .map(|value| value.to_string_lossy().to_string())
@@ -375,6 +401,14 @@ impl Mp4ProcessingPort for FfmpegMp4ProcessingRepository {
 
             on_progress(DecryptionProgress { filename, ratio: 1.0 });
         }
+
+        fs::rename(&temporary_output_guard.path, &output).map_err(|error| {
+            Self::infra_error(format!(
+                "一時出力ファイルを最終出力ファイルへ移動できません: {}",
+                error
+            ))
+        })?;
+        temporary_output_guard.commit();
 
         Ok(output)
     }
