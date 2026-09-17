@@ -170,9 +170,7 @@ fn dialog_overlay(dialog: &DialogState) -> Element<'_, Message> {
 fn status_bar(model: &AppModel) -> Element<'_, Message> {
     container(
         row![
-            text(format!("[{}]", model.ui.status.label()))
-                .size(15)
-                .color(Color::from_rgb8(180, 180, 180)),
+            text(status_label(model)).size(15).color(Color::from_rgb8(180, 180, 180)),
             container(text("")).width(Length::Fill),
             key_status_icon(model.session.has_key),
         ]
@@ -191,6 +189,15 @@ fn status_bar(model: &AppModel) -> Element<'_, Message> {
         }
     })
     .into()
+}
+
+/// タスク進捗を含むステータスラベル取得処理
+fn status_label(model: &AppModel) -> String {
+    if matches!(model.ui.status, AppStatus::Running | AppStatus::Pause) && model.ui.task_total > 0 {
+        format!("[{}] ({}/{})", model.ui.status.label(), model.ui.task_index, model.ui.task_total)
+    } else {
+        format!("[{}]", model.ui.status.label())
+    }
 }
 
 /// ステータスバー用のキーアイコン描画処理

@@ -6,6 +6,49 @@ use crate::presentation::dto::DialogState;
 use crate::presentation::intent::{Effect, InspectContext, InspectionOutcome, Intent};
 use crate::presentation::state::{AppModel, AppStatus};
 
+fn start_next_task(model: &mut AppModel) -> Vec<Effect> {
+    if model.session.active_job {
+        return vec![];
+    }
+
+    if let Some(path) = model.session.task_queue.pop_front() {
+        let key = match model.session.last_key.clone() {
+            Some(key) => key,
+            None => return vec![],
+        };
+        let job_id = model.prepare_decryption(&path, &key);
+        return vec![Effect::StartDecryption { job_id, path, key }];
+    }
+
+    finish_batch_if_ready(model);
+    vec![]
+}
+
+fn finish_batch_if_ready(model: &mut AppModel) {
+    if model.session.active_job
+        || model.session.pending_inspections > 0
+        || !model.session.task_queue.is_empty()
+    {
+        return;
+    }
+
+    model.ui.is_inspecting = false;
+    if model.session.successful_tasks > 0 {
+        let message = if model.session.failed_tasks > 0 {
+            format!(
+                "{}件のファイルの復号が終了しました\n（エラー{}件）",
+                model.session.successful_tasks, model.session.failed_tasks
+            )
+        } else {
+            format!("{}件のファイルの復号が終了しました", model.session.successful_tasks)
+        };
+        model.ui.status = AppStatus::Finished;
+        model.show_info("完了", message, true);
+    } else if model.session.failed_tasks > 0 || model.session.batch_active {
+        model.show_error("エラー", "復号できませんでした", model.session.has_key);
+    }
+}
+
 /// 状態遷移導出処理
 ///
 /// @param model 更新対象 Model
@@ -15,8 +58,12 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
     match intent {
         Intent::LaunchParsed(result) => match result {
             Ok(LaunchRequest::KeyAndFile { key, path }) => {
-                let job_id = model.prepare_decryption(&path, &key);
-                vec![Effect::StartDecryption { job_id, path, key }]
+                model.reset_to_wait(false);
+                model.session.batch_active = true;
+                model.session.task_queue.push_back(path);
+                model.ui.task_total = 1;
+                model.session.last_key = Some(key.clone());
+                start_next_task(model)
             }
             Ok(LaunchRequest::FileOnly(path)) => {
                 model.reset_to_wait(false);
@@ -33,75 +80,68 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             }
         },
         Intent::Tick => vec![],
-        Intent::FileDropped(path) => match model.ui.status {
-            AppStatus::Wait => {
+        Intent::FileDropped(path) => {
+            let new_batch = !model.session.batch_active
+                || matches!(model.ui.status, AppStatus::Finished | AppStatus::Error);
+            if new_batch {
+                model.reset_to_wait(model.session.has_key);
+                model.session.batch_active = true;
+                let inspect_id = model.prepare_inspection(&path);
                 let context = if model.session.has_key {
                     InspectContext::WithKey
                 } else {
                     InspectContext::WithoutKey
                 };
-                let inspect_id = model.prepare_inspection(&path);
-                vec![Effect::InspectFile { inspect_id, path, context }]
+                return vec![Effect::InspectFile { inspect_id, path, context }];
             }
-            AppStatus::Running => {
-                model.ui.status = AppStatus::Pause;
-                model.session.pending_drop = Some(path.clone());
-                model.ui.dialog = Some(DialogState::ConfirmSwitch { path });
-                vec![Effect::PauseWorker]
-            }
-            AppStatus::Finished => {
-                if matches!(model.ui.dialog, Some(DialogState::Info { .. })) {
-                    model.reset_to_wait(model.session.has_key);
-                    let context = if model.session.has_key {
-                        InspectContext::WithKey
-                    } else {
-                        InspectContext::WithoutKey
-                    };
-                    let inspect_id = model.prepare_inspection(&path);
-                    vec![Effect::InspectFile { inspect_id, path, context }]
-                } else {
-                    vec![]
-                }
-            }
-            AppStatus::Error | AppStatus::Pause => vec![],
-        },
+
+            let context = if model.session.has_key {
+                InspectContext::WithKey
+            } else {
+                InspectContext::WithoutKey
+            };
+            let inspect_id = model.prepare_additional_inspection();
+            vec![Effect::InspectFile { inspect_id, path, context }]
+        }
         Intent::FileInspected { inspect_id, path, context, outcome } => {
-            if inspect_id != model.session.current_inspection_id {
+            let known_inspection = model.session.inspection_ids.remove(&inspect_id);
+            let legacy_direct_inspection = model.session.pending_inspections == 0
+                && inspect_id == model.session.current_inspection_id;
+            if !known_inspection && !legacy_direct_inspection {
                 return vec![];
             }
 
+            model.session.pending_inspections = model.session.pending_inspections.saturating_sub(1);
+
             match (context, outcome) {
                 (_, InspectionOutcome::Failed(error)) => {
-                    model.ui.is_inspecting = false;
-                    model.show_error("エラー", error.user_message(), model.session.has_key);
+                    let _ = error;
+                    model.session.failed_tasks += 1;
+                    finish_batch_if_ready(model);
                     vec![]
                 }
                 (InspectContext::WithoutKey, InspectionOutcome::Plain) => {
-                    model.ui.is_inspecting = false;
-                    model.reset_to_wait(false);
-                    model.show_info("確認", "このファイルは暗号化されていません", false);
+                    finish_batch_if_ready(model);
                     vec![]
                 }
                 (InspectContext::WithKey, InspectionOutcome::Plain) => {
-                    model.ui.is_inspecting = false;
-                    model.reset_to_wait(true);
-                    model.show_info("確認", "このファイルは暗号化されていません", true);
+                    finish_batch_if_ready(model);
                     vec![]
                 }
                 (InspectContext::WithoutKey, InspectionOutcome::Encrypted) => {
-                    model.ui.is_inspecting = false;
-                    model.show_key_prompt(path);
+                    model.session.task_queue.push_back(path.clone());
+                    model.ui.task_total += 1;
+                    if model.session.last_key.is_none() && model.ui.dialog.is_none() {
+                        model.ui.is_inspecting = false;
+                        model.show_key_prompt(path);
+                    }
                     vec![]
                 }
                 (InspectContext::WithKey, InspectionOutcome::Encrypted) => {
+                    model.session.task_queue.push_back(path);
+                    model.ui.task_total += 1;
                     model.ui.is_inspecting = false;
-                    if let Some(key) = model.session.last_key.clone() {
-                        let job_id = model.prepare_decryption(&path, &key);
-                        vec![Effect::StartDecryption { job_id, path, key }]
-                    } else {
-                        model.show_error("エラー", "復号できません", false);
-                        vec![]
-                    }
+                    start_next_task(model)
                 }
             }
         }
@@ -110,6 +150,10 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
                 model.ui.filename = filename;
                 model.ui.progress_percent = (ratio * 100.0).clamp(0.0, 100.0);
                 model.ui.is_inspecting = false;
+                model.ui.task_total = model
+                    .ui
+                    .task_total
+                    .max(model.session.successful_tasks + model.session.failed_tasks + 1);
                 if model.ui.status != AppStatus::Pause {
                     model.ui.status = AppStatus::Running;
                 }
@@ -124,27 +168,20 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             match result {
                 DecryptionResult::Completed => {
                     model.ui.progress_percent = 100.0;
-                    model.ui.status = AppStatus::Finished;
-                    model.show_info("完了", "終了しました", true);
-                    vec![]
+                    model.session.active_job = false;
+                    model.session.successful_tasks += 1;
+                    start_next_task(model)
                 }
                 DecryptionResult::Failed(error) => {
-                    model.show_error("エラー", error.user_message(), model.session.has_key);
-                    vec![]
+                    let _ = error;
+                    model.session.active_job = false;
+                    model.session.failed_tasks += 1;
+                    start_next_task(model)
                 }
                 DecryptionResult::Cancelled => {
-                    if let Some(path) = model.session.pending_drop.take() {
-                        if let Some(key) = model.session.last_key.clone() {
-                            let job_id = model.prepare_decryption(&path, &key);
-                            vec![Effect::StartDecryption { job_id, path, key }]
-                        } else {
-                            model.reset_to_wait(false);
-                            vec![]
-                        }
-                    } else {
-                        model.reset_to_wait(model.session.has_key);
-                        vec![]
-                    }
+                    model.session.active_job = false;
+                    model.session.failed_tasks += 1;
+                    start_next_task(model)
                 }
             }
         }
@@ -156,24 +193,7 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             }
             vec![]
         }
-        Intent::DialogConfirmed => {
-            if matches!(model.ui.dialog, Some(DialogState::ConfirmSwitch { .. })) {
-                model.ui.dialog = None;
-                vec![Effect::CancelWorker]
-            } else {
-                vec![]
-            }
-        }
-        Intent::DialogDismissed => {
-            if matches!(model.ui.dialog, Some(DialogState::ConfirmSwitch { .. })) {
-                model.ui.dialog = None;
-                model.session.pending_drop = None;
-                model.ui.status = AppStatus::Running;
-                vec![Effect::ResumeWorker]
-            } else {
-                vec![]
-            }
-        }
+        Intent::DialogConfirmed | Intent::DialogDismissed => vec![],
         Intent::ContextMenuRequested => {
             if model.ui.status == AppStatus::Wait && model.ui.dialog.is_none() {
                 model.ui.dialog = Some(DialogState::ContextMenu);
@@ -213,8 +233,11 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             {
                 match submission {
                     Ok(key) => {
-                        let job_id = model.prepare_decryption(&path, &key);
-                        vec![Effect::StartDecryption { job_id, path, key }]
+                        model.session.last_key = Some(key);
+                        model.ui.dialog = None;
+                        model.ui.is_inspecting = false;
+                        let _ = path;
+                        start_next_task(model)
                     }
                     Err(error) => {
                         model.show_error("エラー", error.user_message(), false);
@@ -320,7 +343,7 @@ mod tests {
 
         assert!(matches!(
             effects.as_slice(),
-            [Effect::InspectFile { path: effect_path, context: InspectContext::WithKey }]
+            [Effect::InspectFile { path: effect_path, context: InspectContext::WithKey, .. }]
             if effect_path == &path
         ));
         assert_eq!(model.ui.status, AppStatus::Running);

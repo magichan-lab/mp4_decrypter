@@ -1,5 +1,6 @@
 //! 画面状態モデル定義
 
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
 use crate::domain::value_objects::DecryptionKey;
@@ -47,6 +48,8 @@ pub struct UiState {
     pub progress_percent: f32,
     pub status: AppStatus,
     pub is_inspecting: bool,
+    pub task_index: usize,
+    pub task_total: usize,
     pub dialog: Option<DialogState>,
 }
 
@@ -55,14 +58,26 @@ pub struct UiState {
 /// @property has_key キー保持有無
 /// @property last_key 最後に成功したキー
 /// @property current_job_id 現在ジョブ識別子
-/// @property pending_drop 実行中切り替え待ちファイル
+/// @property task_queue 復号待ちタスク一覧
+/// @property active_job 現在復号中ジョブの有無
+/// @property pending_inspections 処理中のファイル検査数
+/// @property inspection_ids 処理中ファイル検査の識別子集合
+/// @property successful_tasks 正常終了したタスク数
+/// @property failed_tasks エラー終了したタスク数
+/// @property batch_active 現在のタスク受付単位が有効か
 /// @property current_inspection_id 現在の検査要求識別子
 #[derive(Debug, Clone)]
 pub struct SessionState {
     pub has_key: bool,
     pub last_key: Option<DecryptionKey>,
     pub current_job_id: u64,
-    pub pending_drop: Option<PathBuf>,
+    pub task_queue: VecDeque<PathBuf>,
+    pub active_job: bool,
+    pub pending_inspections: usize,
+    pub inspection_ids: HashSet<u64>,
+    pub successful_tasks: usize,
+    pub failed_tasks: usize,
+    pub batch_active: bool,
     pub current_inspection_id: u64,
 }
 
@@ -87,13 +102,21 @@ impl AppModel {
                 progress_percent: 0.0,
                 status: AppStatus::Wait,
                 is_inspecting: false,
+                task_index: 0,
+                task_total: 0,
                 dialog: None,
             },
             session: SessionState {
                 has_key: false,
                 last_key: None,
                 current_job_id: 0,
-                pending_drop: None,
+                task_queue: VecDeque::new(),
+                active_job: false,
+                pending_inspections: 0,
+                inspection_ids: HashSet::new(),
+                successful_tasks: 0,
+                failed_tasks: 0,
+                batch_active: false,
                 current_inspection_id: 0,
             },
         };
@@ -120,7 +143,15 @@ impl AppModel {
             self.session.last_key = None;
         }
         self.ui.dialog = None;
-        self.session.pending_drop = None;
+        self.session.task_queue.clear();
+        self.session.active_job = false;
+        self.session.pending_inspections = 0;
+        self.session.inspection_ids.clear();
+        self.session.successful_tasks = 0;
+        self.session.failed_tasks = 0;
+        self.session.batch_active = false;
+        self.ui.task_index = 0;
+        self.ui.task_total = 0;
         self.normalize_wait_display();
     }
 
@@ -185,6 +216,17 @@ impl AppModel {
         self.ui.status = AppStatus::Running;
         self.ui.is_inspecting = true;
         self.ui.dialog = None;
+        self.session.batch_active = true;
+        self.session.pending_inspections += 1;
+        self.session.inspection_ids.insert(self.session.current_inspection_id);
+        self.session.current_inspection_id
+    }
+
+    /// 追加ファイル検査要求の状態更新処理
+    pub fn prepare_additional_inspection(&mut self) -> u64 {
+        self.session.current_inspection_id += 1;
+        self.session.pending_inspections += 1;
+        self.session.inspection_ids.insert(self.session.current_inspection_id);
         self.session.current_inspection_id
     }
 
@@ -203,9 +245,11 @@ impl AppModel {
         self.ui.status = AppStatus::Running;
         self.ui.is_inspecting = false;
         self.session.has_key = true;
+        self.session.active_job = true;
         self.ui.dialog = None;
-        self.session.pending_drop = None;
         self.session.last_key = Some(key.clone());
+        self.ui.task_index = self.session.successful_tasks + self.session.failed_tasks + 1;
+        self.ui.task_total = self.ui.task_total.max(self.ui.task_index);
         self.session.current_job_id
     }
 }
