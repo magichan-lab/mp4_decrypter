@@ -32,7 +32,7 @@ pub enum DialogState {
     /// 実行中ジョブ切り替え確認ダイアログ
     ConfirmSwitch { path: PathBuf },
     /// 右クリックメニュー
-    ContextMenu,
+    ContextMenu { has_key: bool },
 }
 
 impl DialogState {
@@ -44,7 +44,7 @@ impl DialogState {
             Self::Info { next_has_key, .. } | Self::Error { next_has_key, .. } => {
                 Some(*next_has_key)
             }
-            Self::KeyPrompt { .. } | Self::ConfirmSwitch { .. } | Self::ContextMenu => None,
+            Self::KeyPrompt { .. } | Self::ConfirmSwitch { .. } | Self::ContextMenu { .. } => None,
         }
     }
 

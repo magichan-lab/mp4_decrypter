@@ -196,12 +196,12 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
         Intent::DialogConfirmed | Intent::DialogDismissed => vec![],
         Intent::ContextMenuRequested => {
             if model.ui.status == AppStatus::Wait && model.ui.dialog.is_none() {
-                model.ui.dialog = Some(DialogState::ContextMenu);
+                model.ui.dialog = Some(DialogState::ContextMenu { has_key: model.session.has_key });
             }
             vec![]
         }
         Intent::ContextMenuDismissed => {
-            if matches!(model.ui.dialog, Some(DialogState::ContextMenu)) {
+            if matches!(model.ui.dialog, Some(DialogState::ContextMenu { .. })) {
                 model.ui.dialog = None;
             }
             vec![]
@@ -214,6 +214,18 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             model.ui.is_inspecting = false;
             model.normalize_wait_display();
             vec![]
+        }
+        Intent::CopyKeyRequested => {
+            if model.session.has_key {
+                if let Some(key) = model.session.last_key.clone() {
+                    model.ui.dialog = None;
+                    vec![Effect::CopyKey(key.as_str().to_string())]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            }
         }
         Intent::KeyInputChanged(value) => {
             if let Some(dialog) = model.ui.dialog.as_mut() {

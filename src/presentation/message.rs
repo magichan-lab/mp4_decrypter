@@ -31,6 +31,8 @@ pub enum Message {
     ContextMenuDismissed,
     /// キークリア要求
     ClearKeyRequested,
+    /// 保持中キーのコピー要求
+    CopyKeyRequested,
     /// キー入力変更
     KeyInputChanged(String),
     /// キー入力確定

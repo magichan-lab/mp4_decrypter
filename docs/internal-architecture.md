@@ -87,6 +87,12 @@ presentation 層では、UI の責務を次のように分離しています。
 - `view.rs`: Model から View を組み立てます。
 - `subscription.rs`: Tick とファイルドロップ監視を管理します。
 
+## キー操作
+
+- キーが有効な待機状態で画面を右クリックすると、設定メニューに「キーをコピー」と「キーをクリア」を表示します。
+- 「キーをコピー」は `CopyKeyRequested` 意図を経由して `Effect::CopyKey` を生成し、Presentation と iced の接続部でクリップボードへ書き込みます。
+- キーが無効な場合は「キーをコピー」を表示せず、コピー操作も実行しません。
+
 ## 開発メモ
 
 - `src/main.rs` は Presentation と Application の配線だけを担当します。

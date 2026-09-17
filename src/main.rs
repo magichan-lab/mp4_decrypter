@@ -89,6 +89,7 @@ impl AppRuntime {
                 self.decryption_runtime.cancel();
                 Task::none()
             }
+            Effect::CopyKey(value) => iced::clipboard::write(value),
         }
     }
 
@@ -172,6 +173,7 @@ fn update(app: &mut AppRuntime, message: Message) -> Task<Message> {
         Message::ContextMenuRequested => app.dispatch(Intent::ContextMenuRequested),
         Message::ContextMenuDismissed => app.dispatch(Intent::ContextMenuDismissed),
         Message::ClearKeyRequested => app.dispatch(Intent::ClearKeyRequested),
+        Message::CopyKeyRequested => app.dispatch(Intent::CopyKeyRequested),
         Message::KeyInputChanged(value) => app.dispatch(Intent::KeyInputChanged(value)),
         Message::KeyInputSubmitted => app.dispatch(Intent::KeyInputSubmitted),
         Message::KeyInputModeChanged(mode) => app.dispatch(Intent::KeyInputModeChanged(mode)),

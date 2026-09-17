@@ -67,6 +67,8 @@ pub enum Intent {
     ContextMenuDismissed,
     /// キークリア要求
     ClearKeyRequested,
+    /// 保持中キーのコピー要求
+    CopyKeyRequested,
     /// キー入力変更
     KeyInputChanged(String),
     /// キー入力確定
@@ -95,4 +97,6 @@ pub enum Effect {
     ResumeWorker,
     /// ワーカーキャンセル要求
     CancelWorker,
+    /// クリップボードへのキー書き込み要求
+    CopyKey(String),
 }

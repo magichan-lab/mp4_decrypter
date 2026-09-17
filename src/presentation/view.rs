@@ -156,7 +156,7 @@ fn dialog_overlay(dialog: &DialogState) -> Element<'_, Message> {
             ..container::Style::default()
         });
 
-    if matches!(dialog, DialogState::ContextMenu) {
+    if matches!(dialog, DialogState::ContextMenu { .. }) {
         mouse_area(overlay).on_press(Message::ContextMenuDismissed).into()
     } else {
         overlay.into()
@@ -285,10 +285,16 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
         ]
         .spacing(12)
         .align_x(Horizontal::Center),
-        DialogState::ContextMenu => {
-            column![button("キークリア").on_press(Message::ClearKeyRequested)]
-                .spacing(8)
-                .align_x(Horizontal::Center)
+        DialogState::ContextMenu { has_key } => {
+            let menu = if *has_key {
+                column![
+                    button("キーをコピー").on_press(Message::CopyKeyRequested),
+                    button("キーをクリア").on_press(Message::ClearKeyRequested),
+                ]
+            } else {
+                column![button("キーをクリア").on_press(Message::ClearKeyRequested)]
+            };
+            menu.spacing(8).align_x(Horizontal::Center)
         }
     };
 
