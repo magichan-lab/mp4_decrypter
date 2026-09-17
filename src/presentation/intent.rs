@@ -99,4 +99,8 @@ pub enum Effect {
     CancelWorker,
     /// クリップボードへのキー書き込み要求
     CopyKey(String),
+    /// 機密情報ストアへのキー保存要求
+    PersistKey(DecryptionKey),
+    /// 機密情報ストアからのキー削除要求
+    DeletePersistedKey,
 }

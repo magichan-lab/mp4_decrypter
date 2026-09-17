@@ -155,6 +155,12 @@ impl AppModel {
         self.normalize_wait_display();
     }
 
+    /// 起動時に機密情報ストアから復元したキーの設定処理
+    pub fn restore_key(&mut self, key: DecryptionKey) {
+        self.session.has_key = true;
+        self.session.last_key = Some(key);
+    }
+
     /// 情報ダイアログ表示処理
     ///
     /// @param title ダイアログタイトル

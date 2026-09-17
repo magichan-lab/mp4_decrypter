@@ -93,6 +93,13 @@ presentation 層では、UI の責務を次のように分離しています。
 - 「キーをコピー」は `CopyKeyRequested` 意図を経由して `Effect::CopyKey` を生成し、Presentation と iced の接続部でクリップボードへ書き込みます。
 - キーが無効な場合は「キーをコピー」を表示せず、コピー操作も実行しません。
 
+## キーの永続化
+
+- `infrastructure::secret_store::SecretStore` が `keyring` を介して OS 標準の機密情報ストアを利用します。Windows は Credential Manager、macOS は Keychain、Linux/Unix 系は Secret Service を対象とします。
+- キー入力確定時に `Effect::PersistKey` を実行し、次回起動時は `AppRuntime::new` で保存キーを読み込んでキー設定済み状態へ復元します。
+- 「キーをクリア」ではメモリ上のキーをクリアした後、`Effect::DeletePersistedKey` でストア上のキーも削除します。
+- 機密情報ストアの読み込み・保存・削除に失敗してもエラー表示は行わず、読み込み失敗時は未設定、保存失敗時はセッション内保持として扱います。
+
 ## 開発メモ
 
 - `src/main.rs` は Presentation と Application の配線だけを担当します。

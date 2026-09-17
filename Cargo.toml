@@ -12,6 +12,7 @@ iced = { version = "0.14", features = ["image", "tokio", "svg"] }
 crossbeam-channel = "0.5"
 rfd = "0.17.2"
 sha2 = "0.10"
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 [build-dependencies]
 cc = "1"

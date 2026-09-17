@@ -10,6 +10,7 @@ use mp4_decrypter::domain::entities::{DecryptionResult, FileEncryptionState, Lau
 use mp4_decrypter::domain::errors::AppError;
 use mp4_decrypter::infrastructure::cli::CliLaunchArgumentParser;
 use mp4_decrypter::infrastructure::ffmpeg::repository::FfmpegMp4ProcessingRepository;
+use mp4_decrypter::infrastructure::secret_store::SecretStore;
 use mp4_decrypter::presentation::intent::{Effect, InspectionOutcome, Intent};
 use mp4_decrypter::presentation::message::Message;
 use mp4_decrypter::presentation::reducer::reduce;
@@ -29,10 +30,12 @@ impl AppRuntime {
     ///
     /// @return 初期化済み統合ランタイム
     fn new() -> Self {
-        Self {
-            model: AppModel::new(),
-            decryption_runtime: DecryptionRuntime::new(FfmpegMp4ProcessingRepository),
+        let mut model = AppModel::new();
+        if let Some(key) = SecretStore.load_key() {
+            model.restore_key(key);
         }
+
+        Self { model, decryption_runtime: DecryptionRuntime::new(FfmpegMp4ProcessingRepository) }
     }
 
     /// 起動要求反映処理
@@ -90,6 +93,14 @@ impl AppRuntime {
                 Task::none()
             }
             Effect::CopyKey(value) => iced::clipboard::write(value),
+            Effect::PersistKey(key) => {
+                SecretStore.save_key(&key);
+                Task::none()
+            }
+            Effect::DeletePersistedKey => {
+                SecretStore.delete_key();
+                Task::none()
+            }
         }
     }
 

@@ -4,3 +4,4 @@
 
 pub mod cli;
 pub mod ffmpeg;
+pub mod secret_store;

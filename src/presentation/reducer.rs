@@ -213,7 +213,7 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             model.ui.status = AppStatus::Wait;
             model.ui.is_inspecting = false;
             model.normalize_wait_display();
-            vec![]
+            vec![Effect::DeletePersistedKey]
         }
         Intent::CopyKeyRequested => {
             if model.session.has_key {
@@ -245,11 +245,14 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             {
                 match submission {
                     Ok(key) => {
+                        let persist_effect = Effect::PersistKey(key.clone());
                         model.session.last_key = Some(key);
                         model.ui.dialog = None;
                         model.ui.is_inspecting = false;
                         let _ = path;
-                        start_next_task(model)
+                        let mut effects = vec![persist_effect];
+                        effects.extend(start_next_task(model));
+                        effects
                     }
                     Err(error) => {
                         model.show_error("エラー", error.user_message(), false);
