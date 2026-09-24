@@ -403,7 +403,7 @@ mod tests {
         assert!(current_effects.is_empty());
         assert!(matches!(
             model.ui.dialog,
-            Some(crate::presentation::dto::DialogState::Info { .. })
+            Some(crate::presentation::dto::DialogState::Error { .. })
         ));
     }
 }
