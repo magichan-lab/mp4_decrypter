@@ -207,8 +207,9 @@ impl Mp4ProcessingPort for FfmpegMp4ProcessingRepository {
 
         let input_str = input_path.to_string_lossy().to_string();
         let output = self.output_path(input_path);
+        let output_str = output.to_string_lossy().to_string();
         let temporary_output = OutputNamingService::build_temporary_output_path(input_path);
-        let output_str = temporary_output.to_string_lossy().to_string();
+        let temporary_output_str = temporary_output.to_string_lossy().to_string();
         let mut temporary_output_guard = TemporaryOutputGuard::new(temporary_output);
         let filename = input_path
             .file_name()
@@ -217,8 +218,13 @@ impl Mp4ProcessingPort for FfmpegMp4ProcessingRepository {
 
         let input_c = CString::new(input_str)
             .map_err(|_| AppError::Validation("入力パスにNUL文字が含まれています".to_string()))?;
+        // 出力コンテナは最終ファイル名の拡張子（例: `.mp4`）から決定する。
+        // 一時ファイル名の `.tmp` を渡すと、FFmpeg が muxer を推測できない。
         let output_c = CString::new(output_str)
             .map_err(|_| AppError::Validation("出力パスにNUL文字が含まれています".to_string()))?;
+        let temporary_output_c = CString::new(temporary_output_str).map_err(|_| {
+            AppError::Validation("一時出力パスにNUL文字が含まれています".to_string())
+        })?;
         let key_name =
             CString::new("decryption_key").expect("static literal must be valid CString");
         let key_value = CString::new(key.as_str())
@@ -307,7 +313,7 @@ impl Mp4ProcessingPort for FfmpegMp4ProcessingRepository {
 
             if (jk_avformat_oformat_flags(output_context.0) & AVFMT_NOFILE) == 0 {
                 let mut out_pb: *mut AVIOContext = ptr::null_mut();
-                let avio_ret = avio_open(&mut out_pb, output_c.as_ptr(), AVIO_FLAG_WRITE);
+                let avio_ret = avio_open(&mut out_pb, temporary_output_c.as_ptr(), AVIO_FLAG_WRITE);
                 if avio_ret < 0 {
                     return Err(Self::infra_error(format!(
                         "avio_open failed: {}",
