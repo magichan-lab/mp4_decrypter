@@ -28,7 +28,7 @@ pub enum DialogState {
     /// エラーダイアログ
     Error { title: String, message: String, next_has_key: bool },
     /// キー入力ダイアログ
-    KeyPrompt { path: PathBuf, value: String, mode: KeyInputMode },
+    KeyPrompt { path: PathBuf, value: String, mode: KeyInputMode, paste_menu_visible: bool },
     /// 実行中ジョブ切り替え確認ダイアログ
     ConfirmSwitch { path: PathBuf },
     /// 右クリックメニュー
@@ -64,12 +64,25 @@ impl DialogState {
     ///
     /// @param mode 更新後入力方式
     pub fn update_key_input_mode(&mut self, mode: KeyInputMode) {
-        if let Self::KeyPrompt { mode: current_mode, value, .. } = self {
+        if let Self::KeyPrompt { mode: current_mode, value, paste_menu_visible, .. } = self {
             if *current_mode != mode {
                 *current_mode = mode;
                 value.clear();
             }
+            *paste_menu_visible = false;
         }
+    }
+
+    /// キー入力欄の貼り付けメニュー表示状態更新処理
+    pub fn set_key_input_paste_menu_visible(&mut self, visible: bool) {
+        if let Self::KeyPrompt { paste_menu_visible, .. } = self {
+            *paste_menu_visible = visible;
+        }
+    }
+
+    /// キー入力欄の貼り付けメニューが表示中か取得処理
+    pub fn is_key_input_paste_menu_visible(&self) -> bool {
+        matches!(self, Self::KeyPrompt { paste_menu_visible: true, .. })
     }
 
     /// キー入力内容取得処理
@@ -77,7 +90,7 @@ impl DialogState {
     /// @return 対象パスと復号キー変換結果
     pub fn key_prompt_submission(&self) -> Option<(PathBuf, Result<DecryptionKey, AppError>)> {
         match self {
-            Self::KeyPrompt { path, value, mode } => {
+            Self::KeyPrompt { path, value, mode, .. } => {
                 let key = match mode {
                     KeyInputMode::EncryptionKey => DecryptionKey::from_padded_input(value),
                     KeyInputMode::Passphrase => DecryptionKey::from_passphrase(value),

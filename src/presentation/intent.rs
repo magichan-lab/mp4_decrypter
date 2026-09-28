@@ -71,6 +71,12 @@ pub enum Intent {
     CopyKeyRequested,
     /// キー入力変更
     KeyInputChanged(String),
+    /// キー入力欄のコンテキストメニュー表示要求
+    KeyInputContextMenuRequested,
+    /// キー入力欄への貼り付け要求
+    PasteKeyInputRequested,
+    /// クリップボードから読み取ったキー入力値
+    KeyInputPasted(Option<String>),
     /// キー入力確定
     KeyInputSubmitted,
     /// キー入力方式変更
@@ -99,6 +105,8 @@ pub enum Effect {
     CancelWorker,
     /// クリップボードへのキー書き込み要求
     CopyKey(String),
+    /// クリップボードからキー入力値を読み取る要求
+    ReadKeyInputClipboard,
     /// 機密情報ストアへのキー保存要求
     PersistKey(DecryptionKey),
     /// 機密情報ストアからのキー削除要求

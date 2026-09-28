@@ -206,6 +206,7 @@ impl AppModel {
             path,
             value: String::new(),
             mode: KeyInputMode::EncryptionKey,
+            paste_menu_visible: false,
         });
     }
 

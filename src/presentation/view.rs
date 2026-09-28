@@ -236,7 +236,7 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
             .align_x(Horizontal::Center)
         }
         #[allow(unused_variables)]
-        DialogState::KeyPrompt { path, value, mode } => {
+        DialogState::KeyPrompt { path, value, mode, paste_menu_visible } => {
             let ok_button = if value.is_empty() {
                 button("OK")
             } else {
@@ -261,10 +261,20 @@ fn dialog_view(dialog: &DialogState) -> Element<'_, Message> {
                     )
                 ]
                 .spacing(10),
-                text_input(placeholder, value)
-                    .on_input(Message::KeyInputChanged)
-                    .on_submit_maybe((!value.is_empty()).then_some(Message::KeyInputSubmitted))
-                    .width(Length::Fixed(260.0)),
+                column![
+                    mouse_area(
+                        text_input(placeholder, value)
+                            .on_input(Message::KeyInputChanged)
+                            .on_submit_maybe(
+                                (!value.is_empty()).then_some(Message::KeyInputSubmitted)
+                            )
+                            .width(Length::Fixed(260.0))
+                    )
+                    .on_right_press(Message::KeyInputContextMenuRequested),
+                    (*paste_menu_visible)
+                        .then(|| button("貼り付け").on_press(Message::PasteKeyInputRequested))
+                ]
+                .spacing(4),
                 row![ok_button, button("キャンセル").on_press(Message::KeyInputCancelled)]
                     .spacing(8)
                     .align_y(Vertical::Center),

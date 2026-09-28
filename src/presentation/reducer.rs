@@ -233,6 +233,30 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
             }
             vec![]
         }
+        Intent::KeyInputContextMenuRequested => {
+            if let Some(dialog) = model.ui.dialog.as_mut() {
+                dialog.set_key_input_paste_menu_visible(true);
+            }
+            vec![]
+        }
+        Intent::PasteKeyInputRequested => {
+            if model.ui.dialog.as_ref().is_some_and(DialogState::is_key_input_paste_menu_visible) {
+                vec![Effect::ReadKeyInputClipboard]
+            } else {
+                vec![]
+            }
+        }
+        Intent::KeyInputPasted(value) => {
+            if let Some(dialog) = model.ui.dialog.as_mut() {
+                if dialog.is_key_input_paste_menu_visible() {
+                    dialog.set_key_input_paste_menu_visible(false);
+                    if let Some(value) = value {
+                        dialog.update_key_input(value);
+                    }
+                }
+            }
+            vec![]
+        }
         Intent::KeyInputModeChanged(mode) => {
             if let Some(dialog) = model.ui.dialog.as_mut() {
                 dialog.update_key_input_mode(mode);
@@ -304,6 +328,45 @@ mod tests {
             model.ui.dialog,
             Some(crate::presentation::dto::DialogState::KeyPrompt { .. })
         ));
+    }
+
+    /// キー入力欄の貼り付けは、表示中の専用メニューからのみ受け付けること
+    #[test]
+    fn paste_key_input_reads_clipboard_and_sanitizes_value() {
+        let mut model = AppModel::new();
+        model.show_key_prompt(PathBuf::from("movie.mp4"));
+
+        let effects = reduce(&mut model, Intent::KeyInputContextMenuRequested);
+        assert!(effects.is_empty());
+        assert!(matches!(
+            model.ui.dialog,
+            Some(DialogState::KeyPrompt { paste_menu_visible: true, .. })
+        ));
+
+        let effects = reduce(&mut model, Intent::PasteKeyInputRequested);
+        assert!(matches!(effects.as_slice(), [Effect::ReadKeyInputClipboard]));
+
+        let effects = reduce(&mut model, Intent::KeyInputPasted(Some(" 00-aa 22zz ".to_string())));
+        assert!(effects.is_empty());
+        assert!(matches!(
+            model.ui.dialog,
+            Some(DialogState::KeyPrompt {
+                value,
+                paste_menu_visible: false,
+                ..
+            }) if value == "00aa22"
+        ));
+    }
+
+    /// 貼り付けメニューを開いていない場合、クリップボード読取を行わないこと
+    #[test]
+    fn paste_key_input_is_ignored_without_its_context_menu() {
+        let mut model = AppModel::new();
+        model.show_key_prompt(PathBuf::from("movie.mp4"));
+
+        let effects = reduce(&mut model, Intent::PasteKeyInputRequested);
+
+        assert!(effects.is_empty());
     }
 
     /// 起動引数のキー付きファイル指定時の開始命令返却確認

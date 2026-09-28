@@ -93,6 +93,7 @@ impl AppRuntime {
                 Task::none()
             }
             Effect::CopyKey(value) => iced::clipboard::write(value),
+            Effect::ReadKeyInputClipboard => iced::clipboard::read().map(Message::KeyInputPasted),
             Effect::PersistKey(key) => {
                 SecretStore.save_key(&key);
                 Task::none()
@@ -186,6 +187,9 @@ fn update(app: &mut AppRuntime, message: Message) -> Task<Message> {
         Message::ClearKeyRequested => app.dispatch(Intent::ClearKeyRequested),
         Message::CopyKeyRequested => app.dispatch(Intent::CopyKeyRequested),
         Message::KeyInputChanged(value) => app.dispatch(Intent::KeyInputChanged(value)),
+        Message::KeyInputContextMenuRequested => app.dispatch(Intent::KeyInputContextMenuRequested),
+        Message::PasteKeyInputRequested => app.dispatch(Intent::PasteKeyInputRequested),
+        Message::KeyInputPasted(value) => app.dispatch(Intent::KeyInputPasted(value)),
         Message::KeyInputSubmitted => app.dispatch(Intent::KeyInputSubmitted),
         Message::KeyInputModeChanged(mode) => app.dispatch(Intent::KeyInputModeChanged(mode)),
         Message::KeyInputCancelled => app.dispatch(Intent::KeyInputCancelled),

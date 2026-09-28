@@ -35,6 +35,12 @@ pub enum Message {
     CopyKeyRequested,
     /// キー入力変更
     KeyInputChanged(String),
+    /// キー入力欄のコンテキストメニュー表示要求
+    KeyInputContextMenuRequested,
+    /// キー入力欄への貼り付け要求
+    PasteKeyInputRequested,
+    /// クリップボードから読み取ったキー入力値
+    KeyInputPasted(Option<String>),
     /// キー入力確定
     KeyInputSubmitted,
     /// キー入力方式変更
