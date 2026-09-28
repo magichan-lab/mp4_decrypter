@@ -24,7 +24,8 @@ application.
 - This repository's own source code is licensed under MIT.
 - The application is designed to use FFmpeg shared libraries from either:
   - `$FFMPEG_DIR/include` and `$FFMPEG_DIR/lib`, or
-  - `third_party/ffmpeg/include` and `third_party/ffmpeg/lib`.
+  - `third_party/ffmpeg/<target-triple>/include` and
+    `third_party/ffmpeg/<target-triple>/lib`.
 - The build uses dynamic or static linking to FFmpeg (`avformat`, `avcodec`, `avutil`,
   `swresample`, `swscale`), so end users can replace the FFmpeg shared libraries with
   compatible builds.

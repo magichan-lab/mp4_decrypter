@@ -4,6 +4,9 @@
 /release
 /logo
 /tmp
-/third_party/ffmpeg/include/*
-/third_party/ffmpeg/lib/*
-
+/third_party/ffmpeg/*/include/*
+/third_party/ffmpeg/*/lib/*
+/third_party/ffmpeg/*/bin/*
+!/third_party/ffmpeg/*/include/.gitkeep
+!/third_party/ffmpeg/*/lib/.gitkeep
+!/third_party/ffmpeg/*/bin/.gitkeep

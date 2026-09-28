@@ -52,8 +52,12 @@ MP4 Decrypter は、暗号化された MP4 ファイルを復号し、復号済�
    - `FFMPEG_DIR/include`
    - `FFMPEG_DIR/lib`
 2. `FFMPEG_DIR` が未定義の場合
-   - `third_party/ffmpeg/include`
-   - `third_party/ffmpeg/lib`
+   - `third_party/ffmpeg/<ターゲット名>/include`
+   - `third_party/ffmpeg/<ターゲット名>/lib`
+
+`<ターゲット名>` には Cargo のターゲットトリプルを使用します。たとえば
+`x86_64-pc-windows-gnu` 向けのビルドでは
+`third_party/ffmpeg/x86_64-pc-windows-gnu` が選択されます。
 
 ### セットアップ例
 
@@ -67,8 +71,9 @@ cargo build
 ```text
 third_party/
 └── ffmpeg/
-    ├── include/
-    └── lib/
+    └── x86_64-pc-windows-gnu/
+        ├── include/
+        └── lib/
 ```
 
 ### 開発時の確認コマンド
@@ -79,7 +84,7 @@ cargo test
 cargo build
 ```
 
-> `build.rs` は `FFMPEG_DIR` または `third_party/ffmpeg` に有効な FFmpeg の `include` / `lib` が無い場合は失敗します。
+> `build.rs` は `FFMPEG_DIR` または `third_party/ffmpeg/<ターゲット名>` に有効な FFmpeg の `include` / `lib` が無い場合は失敗します。
 
 ## ライセンス
 
