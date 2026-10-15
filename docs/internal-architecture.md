@@ -97,7 +97,7 @@ presentation 層では、UI の責務を次のように分離しています。
 ## キーの永続化
 
 - `infrastructure::secret_store::SecretStore` が `keyring` を介して OS 標準の機密情報ストアを利用します。Windows は Credential Manager、macOS は Keychain、Linux/Unix 系は Secret Service を対象とします。
-- キー入力確定時に `Effect::PersistKey` を実行し、次回起動時は `AppRuntime::new` で保存キーを読み込んでキー設定済み状態へ復元します。
+- キー入力確定時とキー付き起動引数の解析時に `Effect::PersistKey` を実行します。次回起動時は `AppRuntime::new` で保存キーを読み込み、引数なし起動やファイルのみの起動でもキー設定済み状態を保持します。
 - 「キーをクリア」ではメモリ上のキーをクリアした後、`Effect::DeletePersistedKey` でストア上のキーも削除します。
 - 機密情報ストアの読み込み・保存・削除に失敗してもエラー表示は行わず、読み込み失敗時は未設定、保存失敗時はセッション内保持として扱います。
 

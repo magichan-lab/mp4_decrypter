@@ -63,15 +63,22 @@ pub fn reduce(model: &mut AppModel, intent: Intent) -> Vec<Effect> {
                 model.session.task_queue.push_back(path);
                 model.ui.task_total = 1;
                 model.session.last_key = Some(key.clone());
-                start_next_task(model)
+                let mut effects = vec![Effect::PersistKey(key)];
+                effects.extend(start_next_task(model));
+                effects
             }
             Ok(LaunchRequest::FileOnly(path)) => {
-                model.reset_to_wait(false);
+                model.reset_to_wait(model.session.has_key);
                 let inspect_id = model.prepare_inspection(&path);
-                vec![Effect::InspectFile { inspect_id, path, context: InspectContext::WithoutKey }]
+                let context = if model.session.has_key {
+                    InspectContext::WithKey
+                } else {
+                    InspectContext::WithoutKey
+                };
+                vec![Effect::InspectFile { inspect_id, path, context }]
             }
             Ok(LaunchRequest::NoFile) => {
-                model.reset_to_wait(false);
+                model.reset_to_wait(model.session.has_key);
                 vec![]
             }
             Err(error) => {
@@ -369,7 +376,7 @@ mod tests {
         assert!(effects.is_empty());
     }
 
-    /// 起動引数のキー付きファイル指定時の開始命令返却確認
+    /// 起動引数のキーを保存して復号を開始すること
     #[test]
     fn start_decryption_on_launch_with_key() {
         let mut model = AppModel::new();
@@ -382,9 +389,52 @@ mod tests {
             })),
         );
 
-        assert!(
-            matches!(effects.as_slice(), [Effect::StartDecryption { key: effect_key, .. }] if effect_key == &key)
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::PersistKey(saved_key), Effect::StartDecryption { key: effect_key, .. }]
+                if saved_key == &key && effect_key == &key
+        ));
+        assert!(model.session.has_key);
+    }
+
+    /// 保存済みキーを読み込んだ後、引数なし起動でも保持すること
+    #[test]
+    fn keep_restored_key_on_launch_without_file() {
+        let mut model = AppModel::new();
+        let key = crate::domain::value_objects::DecryptionKey::parse("0011aa22").unwrap();
+        model.restore_key(key.clone());
+
+        let effects = reduce(
+            &mut model,
+            Intent::LaunchParsed(Ok(crate::domain::entities::LaunchRequest::NoFile)),
         );
+
+        assert!(effects.is_empty());
+        assert!(model.session.has_key);
+        assert_eq!(model.session.last_key, Some(key));
+    }
+
+    /// ファイルのみ指定時は保存済みキーを使う文脈で検査すること
+    #[test]
+    fn inspect_file_with_restored_key_on_launch() {
+        let mut model = AppModel::new();
+        let key = crate::domain::value_objects::DecryptionKey::parse("0011aa22").unwrap();
+        model.restore_key(key.clone());
+        let path = PathBuf::from("movie.mp4");
+
+        let effects = reduce(
+            &mut model,
+            Intent::LaunchParsed(Ok(crate::domain::entities::LaunchRequest::FileOnly(
+                path.clone(),
+            ))),
+        );
+
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::InspectFile { path: effect_path, context: InspectContext::WithKey, .. }]
+                if effect_path == &path
+        ));
+        assert_eq!(model.session.last_key, Some(key));
     }
 
     /// 待機中ドロップ時に検査中表示へ遷移すること
